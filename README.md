@@ -1,4 +1,4 @@
-# Split
+# Split More Wise
 
 A local-only group expense splitter (a mini Splitwise) built around a **single-operator**
 model: one person uses the app and can record expenses **on behalf of anyone** in the group.
@@ -26,7 +26,7 @@ model: one person uses the app and can record expenses **on behalf of anyone** i
 
 ## Overview
 
-Split keeps track of who paid for what in a small group and computes who owes whom.
+Split More Wise keeps track of who paid for what in a small group and computes who owes whom.
 Because it is designed for a single operator, the person using the app can enter an
 expense that was paid by a friend and shared among several people, which makes it a fast
 way to keep a shared ledger without asking everyone to install anything.
