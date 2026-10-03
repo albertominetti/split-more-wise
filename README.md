@@ -12,6 +12,7 @@ model: one person uses the app and can record expenses **on behalf of anyone** i
 ## Table of contents
 
 - [Overview](#overview)
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Tech stack](#tech-stack)
 - [Requirements](#requirements)
@@ -32,6 +33,33 @@ way to keep a shared ledger without asking everyone to install anything.
 
 All state lives in a single JSON file next to the server. Starting the server with no
 data file seeds a small example group so the interface is immediately usable.
+
+## Screenshots
+
+The dashboard shows the totals, the settle-up suggestions, the per-member balances and
+the forms to add an expense or record a payment, with the expense list underneath.
+
+![Split dashboard](docs/screenshots/01-dashboard.png)
+
+Adding an expense, with the live split preview for each split mode:
+
+| Equal | By shares | By exact amounts |
+|---|---|---|
+| ![Equal split](docs/screenshots/02-add-expense-equal.png) | ![Split by shares](docs/screenshots/03-split-shares.png) | ![Split by exact amounts](docs/screenshots/04-split-exact.png) |
+
+Settle-up pre-fill and the expense list:
+
+| Settle up | Expenses |
+|---|---|
+| ![Settle up](docs/screenshots/05-settle-prefill.png) | ![Expenses](docs/screenshots/06-expenses.png) |
+
+Mobile layout, emulated on an iPhone 14 Pro (393 x 852 viewport, 3x, mobile user agent and touch input):
+
+<img src="docs/screenshots/07-mobile-dashboard.png" width="340" alt="Split on a phone" />
+
+| Add expense | Settle up | Expenses |
+|---|---|---|
+| ![Add expense on mobile](docs/screenshots/08-mobile-add-expense.png) | ![Settle up on mobile](docs/screenshots/09-mobile-settle.png) | ![Expenses on mobile](docs/screenshots/10-mobile-expenses.png) |
 
 ## Features
 
