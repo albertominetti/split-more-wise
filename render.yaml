@@ -11,7 +11,7 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    buildCommand: "echo no build step (zero dependencies)"
+    buildCommand: "echo no build step"
     startCommand: "node server.js"
     healthCheckPath: /
     envVars:
