@@ -18,6 +18,7 @@ model: one person uses the app and can record expenses **on behalf of anyone** i
 - [Requirements](#requirements)
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
+- [Deploy](#deploy)
 - [REST API](#rest-api)
 - [Data model](#data-model)
 - [Project structure](#project-structure)
@@ -82,7 +83,8 @@ Settle-up pre-fill and the expense list:
 - **Backend**: Node.js standard library only (`node:http`, `node:fs`, `node:path`,
   `node:crypto`). No web framework, no dependencies.
 - **Frontend**: vanilla HTML, CSS and JavaScript. No framework, no bundler, no CDN.
-- **Persistence**: a single JSON file, written atomically.
+- **Persistence**: pluggable store (`store.js`). By default a single JSON file, written
+  atomically; alternatively an Upstash-compatible Redis (KV) store when the KV env vars are set.
 
 ## Requirements
 
@@ -105,13 +107,51 @@ nohup node server.js > server.log 2>&1 &
 
 ## Configuration
 
+Everything is configured through environment variables.
+
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `11000` | TCP port the server listens on. |
+| `DATA_FILE` | `./data.json` | Path of the JSON state file (file storage). |
+| `DATA_DIR` | `.` | Directory for `data.json` when `DATA_FILE` is not set. Useful with a mounted disk. |
+| `UPSTASH_REDIS_REST_URL` | _(unset)_ | With the token below, keep the state in a Redis (KV) store instead of a file. |
+| `UPSTASH_REDIS_REST_TOKEN` | _(unset)_ | Token for the KV store above. |
+| `DATA_KEY` | `split-more-wise:state` | Key used inside the KV store. |
+| `DEMO` | _(off)_ | `1`/`true` enables demo mode: sample data on boot, a DEMO badge, a "Reset demo" button and `POST /api/demo/reset`. |
+| `DEMO_RESET_MINUTES` | `0` | In demo mode, auto-reset the data every N minutes (`0` = never). |
 
 The server binds to `0.0.0.0`, so it is reachable from the local network. Because there is
-no authentication, only expose it on trusted networks. For a friendly hostname and TLS in
-a home network, put it behind a reverse proxy.
+no authentication, only expose it on trusted networks, or run it in demo mode.
+
+## Deploy
+
+The app has no dependencies and reads `PORT`, so it runs on any Node host. The only real
+question is where the state lives.
+
+**Quickest path to a public demo (Render).** Use the included `render.yaml` blueprint: it
+creates a free Node web service with `DEMO=1` and `DEMO_RESET_MINUTES=30`. On the free plan
+the filesystem is ephemeral, which for a demo is a feature: the data resets on every
+restart/deploy and every 30 minutes, so the demo stays clean and self-healing.
+
+**Persistence options.**
+
+- **Disk (Render Disk, Fly volume, any VPS):** mount a disk and set `DATA_DIR` to the mount
+  path (for example `DATA_DIR=/data`). The file storage then keeps the data across restarts.
+- **KV store (Upstash Redis):** set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
+  The whole state is stored as one JSON value, so the app also runs on serverless platforms
+  with no filesystem (Vercel, Netlify functions, Cloudflare Workers via the Upstash
+  integration). The Upstash free tier is plenty for this app.
+
+**Docker.**
+
+```bash
+docker build -t split-more-wise .
+docker run -p 11000:11000 -e DEMO=1 split-more-wise
+```
+
+**A note on auth.** There is no login, by design. A public demo is fine: demo mode seeds
+disposable data and offers a reset. For real personal data, keep it on a private network or
+behind a reverse proxy with authentication.
 
 ## REST API
 
@@ -171,11 +211,14 @@ the first participant and the behaviour is mirrored on both client and server.
 ```
 .
 ├── server.js            # HTTP server, router, API and static file handling
+├── store.js             # Storage abstraction: file (default) or Upstash-compatible KV
 ├── public/
 │   ├── index.html       # Single-page application shell
 │   ├── app.js           # Frontend logic (vanilla JS)
 │   └── styles.css       # Styling
 ├── data.json            # Persisted store (created and seeded on first run)
+├── Dockerfile           # Zero-dependency image
+├── render.yaml          # Render blueprint (public demo)
 ├── package.json
 ├── LICENSE
 └── README.md

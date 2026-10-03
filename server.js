@@ -1,7 +1,10 @@
-// Split: mini Splitwise, local-only single-operator tool.
+// Split More Wise: mini Splitwise, single-operator tool.
 // Zero dependencies: only Node.js stdlib (node:http, node:fs, node:path, node:crypto).
 // Run: node server.js   (env PORT overrides, default 11000)
-// Data: ./data.json written atomically (tmp file + rename).
+// Data: pluggable store (see store.js). Local file by default; an Upstash-compatible Redis
+//       (KV) is used when UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are set.
+// Demo: DEMO=1 seeds sample data, exposes POST /api/demo/reset, and can auto-reset every
+//       DEMO_RESET_MINUTES minutes (0 = never).
 
 'use strict';
 
@@ -9,12 +12,16 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { createStore } = require('./store');
 
 const PORT = Number.parseInt(process.env.PORT || '11000', 10) || 11000;
 const HOST = '0.0.0.0';
 const ROOT = __dirname;
-const DATA_FILE = path.join(ROOT, 'data.json');
 const PUBLIC_DIR = path.join(ROOT, 'public');
+const APP_NAME = 'Split More Wise';
+const DEMO = /^(1|true|yes|on)$/i.test(process.env.DEMO || '');
+const DEMO_RESET_MINUTES = Number.parseInt(process.env.DEMO_RESET_MINUTES || '0', 10) || 0;
+const store = createStore();
 
 // ---------------------------------------------------------------------------
 // Store: load / seed / atomic save
@@ -32,51 +39,81 @@ function seedData() {
   };
 }
 
-function loadData() {
-  try {
-    const raw = fs.readFileSync(DATA_FILE, 'utf8');
-    const data = JSON.parse(raw);
-    // Be tolerant: ensure the three arrays exist.
-    if (!Array.isArray(data.members)) data.members = [];
-    if (!Array.isArray(data.expenses)) data.expenses = [];
-    if (!Array.isArray(data.settlements)) data.settlements = [];
-    return data;
-  } catch (err) {
-    if (err && err.code !== 'ENOENT') console.error('Could not parse data.json, reseeding:', err.message);
-    const data = seedData();
-    // Seed one friendly example expense so balances/settle-up are visible.
-    const [a, b, c] = data.members;
-    if (a && b && c) {
-      const id = crypto.randomUUID();
-      data.expenses.push({
-        id,
-        description: 'Welcome dinner 🍕',
-        amount: 60,
-        currency: 'CHF',
-        date: todayISO(),
-        paidBy: a.id,
-        split: [
-          { memberId: a.id, share: 20 },
-          { memberId: b.id, share: 20 },
-          { memberId: c.id, share: 20 },
-        ],
-        category: 'Food',
-        createdAt: new Date().toISOString(),
-      });
-    }
-    saveData(data);
-    return data;
+// First-run data: a small example group with one friendly expense so balances are visible.
+function firstRunData() {
+  const data = seedData();
+  const [a, b, c] = data.members;
+  if (a && b && c) {
+    data.expenses.push({
+      id: crypto.randomUUID(),
+      description: 'Welcome dinner 🍕',
+      amount: 60,
+      currency: 'CHF',
+      date: todayISO(),
+      paidBy: a.id,
+      split: [
+        { memberId: a.id, share: 20 },
+        { memberId: b.id, share: 20 },
+        { memberId: c.id, share: 20 },
+      ],
+      category: 'Food',
+      createdAt: new Date().toISOString(),
+    });
   }
+  return data;
 }
 
-// Atomic write: write to tmp file in the same directory, then rename.
-function saveData(data) {
-  const tmp = DATA_FILE + '.' + process.pid + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
-  fs.renameSync(tmp, DATA_FILE);
+// Richer data used by the public demo (DEMO=1).
+function demoData() {
+  const data = seedData();
+  const [a, b, c] = data.members;
+  const add = (description, amount, paidBy, shares, category) => {
+    data.expenses.push({
+      id: crypto.randomUUID(),
+      description,
+      amount,
+      currency: 'CHF',
+      date: todayISO(),
+      paidBy: paidBy.id,
+      split: shares.map(([m, cents]) => ({ memberId: m.id, share: cents / 100 })),
+      category,
+      createdAt: new Date().toISOString(),
+    });
+  };
+  add('Groceries 🛒', 84.3, a, [[a, 2810], [b, 2810], [c, 2810]], 'Shopping');
+  add('Taxi to airport 🚕', 45, b, [[b, 2250], [c, 2250]], 'Transport');
+  add('Airbnb, 2 nights 🏠', 320, c, [[a, 10667], [b, 10666], [c, 10667]], 'Housing');
+  add('Coffee & pastries ☕', 12.5, b, [[a, 417], [b, 416], [c, 417]], 'Food');
+  return data;
 }
 
-let db = loadData();
+function normalize(data) {
+  if (!data || typeof data !== 'object') return null;
+  if (!Array.isArray(data.members)) data.members = [];
+  if (!Array.isArray(data.expenses)) data.expenses = [];
+  if (!Array.isArray(data.settlements)) data.settlements = [];
+  return data;
+}
+
+async function saveData(data) {
+  await store.save(data);
+}
+
+async function resetData() {
+  db = DEMO ? demoData() : firstRunData();
+  await saveData(db);
+  return db;
+}
+
+async function initData() {
+  const loaded = normalize(await store.load());
+  if (loaded) return loaded;
+  const fresh = DEMO ? demoData() : firstRunData();
+  await store.save(fresh);
+  return fresh;
+}
+
+let db = null;
 
 // ---------------------------------------------------------------------------
 // Money helpers: compute everything in integer cents to avoid float drift.
@@ -340,6 +377,18 @@ async function handle(req, res) {
     return sendJSON(res, 200, { members: db.members, expenses: db.expenses, settlements: db.settlements });
   }
 
+  // --- GET /api/config -----------------------------------------------------
+  if (method === 'GET' && pathname === '/api/config') {
+    return sendJSON(res, 200, { name: APP_NAME, demo: DEMO, demoResetMinutes: DEMO_RESET_MINUTES, storage: store.kind });
+  }
+
+  // --- POST /api/demo/reset ------------------------------------------------
+  if (method === 'POST' && pathname === '/api/demo/reset') {
+    if (!DEMO) return sendError(res, 403, 'Reset is only available in demo mode.');
+    await resetData();
+    return sendJSON(res, 200, { ok: true });
+  }
+
   // --- GET /api/summary ----------------------------------------------------
   if (method === 'GET' && pathname === '/api/summary') {
     return sendJSON(res, 200, computeSummary());
@@ -357,7 +406,7 @@ async function handle(req, res) {
     const emoji = typeof body.emoji === 'string' ? body.emoji.trim().slice(0, 8) : '';
     const member = { id: crypto.randomUUID(), name, ...(emoji ? { emoji } : {}) };
     db.members.push(member);
-    saveData(db);
+    await saveData(db);
     return sendJSON(res, 201, member);
   }
   {
@@ -378,7 +427,7 @@ async function handle(req, res) {
           member.emoji = typeof body.emoji === 'string' ? body.emoji.trim().slice(0, 8) : '';
           if (!member.emoji) delete member.emoji;
         }
-        saveData(db);
+        await saveData(db);
         return sendJSON(res, 200, member);
       }
       if (method === 'DELETE') {
@@ -388,7 +437,7 @@ async function handle(req, res) {
           return sendError(res, 409, 'Cannot delete: member is referenced by expenses or settlements. Delete those first.');
         }
         db.members = db.members.filter((x) => x.id !== id);
-        saveData(db);
+        await saveData(db);
         return sendJSON(res, 200, { ok: true });
       }
       return sendError(res, 405, 'Method not allowed');
@@ -419,7 +468,7 @@ async function handle(req, res) {
     };
     if (!expense.category) delete expense.category;
     db.expenses.push(expense);
-    saveData(db);
+    await saveData(db);
     return sendJSON(res, 201, expense);
   }
   {
@@ -452,12 +501,12 @@ async function handle(req, res) {
         } else {
           delete expense.category;
         }
-        saveData(db);
+        await saveData(db);
         return sendJSON(res, 200, expense);
       }
       if (method === 'DELETE') {
         db.expenses = db.expenses.filter((e) => e.id !== id);
-        saveData(db);
+        await saveData(db);
         return sendJSON(res, 200, { ok: true });
       }
       return sendError(res, 405, 'Method not allowed');
@@ -486,7 +535,7 @@ async function handle(req, res) {
     };
     if (typeof body.note === 'string' && body.note.trim()) st.note = body.note.trim().slice(0, 200);
     db.settlements.push(st);
-    saveData(db);
+    await saveData(db);
     return sendJSON(res, 201, st);
   }
   {
@@ -497,7 +546,7 @@ async function handle(req, res) {
       if (!st) return sendError(res, 404, 'Settlement not found');
       if (method === 'DELETE') {
         db.settlements = db.settlements.filter((s) => s.id !== id);
-        saveData(db);
+        await saveData(db);
         return sendJSON(res, 200, { ok: true });
       }
       return sendError(res, 405, 'Method not allowed');
@@ -518,6 +567,17 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`Split is running at http://${HOST}:${PORT}  (data: ${DATA_FILE})`);
-});
+async function main() {
+  db = await initData();
+  if (DEMO && DEMO_RESET_MINUTES > 0) {
+    setInterval(() => {
+      resetData().catch((e) => console.error('demo reset failed:', e.message));
+    }, DEMO_RESET_MINUTES * 60 * 1000).unref();
+  }
+  server.listen(PORT, HOST, () => {
+    const mode = DEMO ? ', demo mode' : '';
+    console.log(`${APP_NAME} is running at http://${HOST}:${PORT}  (storage: ${store.kind} ${store.where}${mode})`);
+  });
+}
+
+main().catch((err) => { console.error('Fatal:', err); process.exit(1); });

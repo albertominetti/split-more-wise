@@ -1,0 +1,11 @@
+node_modules/
+data.json
+data/
+server.log
+*.log
+docs/
+.git/
+.gitignore
+Dockerfile
+.dockerignore
+render.yaml

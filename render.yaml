@@ -1,0 +1,21 @@
+# Render blueprint for Split More Wise (https://render.com/docs/blueprint-spec).
+# Deploys the app as a public DEMO: sample data is seeded on boot, the UI shows a DEMO badge
+# and a "Reset demo" button, and the data auto-resets every DEMO_RESET_MINUTES minutes.
+#
+# The free plan has an ephemeral filesystem (data resets on every restart/deploy, which is fine
+# for a demo). For persistence, either attach a Disk and set DATA_DIR to the mount path, or set
+# UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN to keep the state in a KV store.
+services:
+  - type: web
+    name: split-more-wise
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: "echo no build step (zero dependencies)"
+    startCommand: "node server.js"
+    healthCheckPath: /
+    envVars:
+      - key: DEMO
+        value: "1"
+      - key: DEMO_RESET_MINUTES
+        value: "30"

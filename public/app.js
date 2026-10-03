@@ -576,4 +576,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {
     toast('Could not reach the server: ' + e.message);
   }
+  try {
+    const cfg = await api('GET', '/api/config');
+    if (cfg && cfg.demo) {
+      $('demo-badge').hidden = false;
+      const reset = $('demo-reset');
+      reset.hidden = false;
+      reset.addEventListener('click', async () => {
+        try {
+          await api('POST', '/api/demo/reset');
+          await refresh();
+          toast('Demo data reset');
+        } catch (e) { toast('Reset failed: ' + e.message); }
+      });
+    }
+  } catch (_) { /* /api/config is optional */ }
 });
