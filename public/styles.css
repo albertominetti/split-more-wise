@@ -233,6 +233,7 @@ input:focus, select:focus, button:focus { outline: 2px solid var(--brand); outli
   border-radius: 8px; cursor: pointer;
 }
 .emoji-pop button:hover, .emoji-pop button:focus { background: var(--bg); outline: none; }
+.emoji-pop[hidden] { display: none; }
 .emoji-pop button.none { grid-column: 1 / -1; font-size: 0.8rem; color: var(--muted); padding: 6px 0; }
 .member-list .emoji-btn { width: 34px; min-height: 30px; font-size: 1.05rem; }
 
