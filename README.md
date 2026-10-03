@@ -9,6 +9,8 @@ model: one person uses the app and can record expenses **on behalf of anyone** i
 - Zero npm dependencies: the backend uses only the Node.js standard library.
 - The frontend is vanilla HTML, CSS and JavaScript. No frameworks, no CDN, no build step, fully offline.
 
+**Live demo:** <https://split-more-wise.onrender.com> (public demo with sample data, resets every 30 minutes).
+
 ## Table of contents
 
 - [Overview](#overview)
