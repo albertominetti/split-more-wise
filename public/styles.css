@@ -207,14 +207,34 @@ input:focus, select:focus, button:focus { outline: 2px solid var(--brand); outli
 
 /* Members */
 .member-list li {
+  position: relative;
   display: flex; align-items: center; gap: 8px;
   padding: 7px 2px; border-top: 1px solid var(--line);
 }
 .member-list li:first-child { border-top: 0; }
 .member-list .mname { flex: 1; font-weight: 600; }
-.member-form { display: flex; gap: 8px; margin-top: 10px; }
-.member-form input:first-child { flex: 1; }
-.emoji-input { width: 64px; text-align: center; }
+.member-form { position: relative; display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: stretch; }
+.member-form #member-name { flex: 1 1 150px; min-width: 0; }
+.emoji-field { position: relative; }
+.emoji-btn {
+  border: 1px solid var(--line); background: #fff; border-radius: 9px;
+  width: 46px; min-height: 40px; padding: 0;
+  font-size: 1.25rem; line-height: 1; cursor: pointer;
+}
+.emoji-btn:hover { background: var(--bg); }
+.emoji-pop {
+  position: absolute; z-index: 60; left: 0; right: 0; bottom: calc(100% + 6px);
+  width: auto; padding: 8px;
+  display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+}
+.emoji-pop button {
+  font-size: 1.2rem; line-height: 1.4; padding: 2px 0; border: 0; background: transparent;
+  border-radius: 8px; cursor: pointer;
+}
+.emoji-pop button:hover, .emoji-pop button:focus { background: var(--bg); outline: none; }
+.emoji-pop button.none { grid-column: 1 / -1; font-size: 0.8rem; color: var(--muted); padding: 6px 0; }
+.member-list .emoji-btn { width: 34px; min-height: 30px; font-size: 1.05rem; }
 
 .toast {
   position: fixed;

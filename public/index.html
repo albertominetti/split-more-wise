@@ -164,8 +164,11 @@
           <h2>Members</h2>
           <ul id="member-list" class="member-list"></ul>
           <form id="member-form" class="member-form" novalidate>
+            <div class="emoji-field">
+              <button type="button" id="member-emoji-btn" class="emoji-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Choose an emoji (optional)" title="Choose an emoji">😀</button>
+              <input type="hidden" id="member-emoji" value="" />
+            </div>
             <input id="member-name" type="text" placeholder="Name (e.g. Sam)" maxlength="60" required aria-label="Member name" />
-            <input id="member-emoji" type="text" placeholder="😀" maxlength="8" aria-label="Emoji (optional)" class="emoji-input" />
             <button type="submit" class="btn primary">Add</button>
           </form>
           <div id="member-error" class="error" role="alert" hidden></div>

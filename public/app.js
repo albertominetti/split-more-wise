@@ -139,28 +139,93 @@ function renderBalances() {
   }).join('');
 }
 
+// --- Emoji picker --------------------------------------------------------
+const EMOJI_SET = ['🦊','🐻','🐱','🐶','🐺','🐸','🐯','🦁','🐮','🐷','🐭','🐹','🐰','🐨','🐼','🐵','🐔','🐧','🦉','🦄','🐳','🐢','🦋','🌸','🌈','🍕','🍔','🍣','☕','🍺','🎉','⚽','🚗','🏠','💼','🎧','📚','⭐','🔥','💸','🧾','🙋'];
+const EMOJI_DEFAULT = '😀';
+
+let emojiPop = null;
+let emojiAnchor = null;
+let emojiCb = null;
+
+function closeEmojiPicker() {
+  if (emojiPop) emojiPop.hidden = true;
+  if (emojiAnchor) emojiAnchor.setAttribute('aria-expanded', 'false');
+  emojiAnchor = null;
+  emojiCb = null;
+}
+
+function openEmojiPicker(anchorBtn, onPick) {
+  if (!emojiPop) {
+    emojiPop = document.createElement('div');
+    emojiPop.className = 'emoji-pop';
+    emojiPop.setAttribute('role', 'listbox');
+    emojiPop.setAttribute('aria-label', 'Choose an emoji');
+    for (const e of EMOJI_SET) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = e;
+      b.setAttribute('role', 'option');
+      b.addEventListener('click', () => { const cb = emojiCb; closeEmojiPicker(); if (cb) cb(e); });
+      emojiPop.appendChild(b);
+    }
+    const none = document.createElement('button');
+    none.type = 'button';
+    none.className = 'none';
+    none.textContent = 'No emoji';
+    none.addEventListener('click', () => { const cb = emojiCb; closeEmojiPicker(); if (cb) cb(''); });
+    emojiPop.appendChild(none);
+    anchorBtn.parentNode.appendChild(emojiPop);
+    document.addEventListener('click', (ev) => {
+      if (emojiPop && !emojiPop.hidden && !emojiPop.contains(ev.target) && !ev.target.closest('.emoji-btn')) closeEmojiPicker();
+    });
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeEmojiPicker(); });
+  }
+  const host = anchorBtn.closest('.member-form') || anchorBtn.closest('li') || anchorBtn.parentNode;
+  if (emojiPop.parentNode !== host) host.appendChild(emojiPop);
+  emojiAnchor = anchorBtn;
+  emojiCb = onPick;
+  emojiPop.hidden = false;
+  anchorBtn.setAttribute('aria-expanded', 'true');
+}
+
+function toggleEmojiPicker(anchorBtn, onPick) {
+  if (emojiPop && !emojiPop.hidden && emojiAnchor === anchorBtn) { closeEmojiPicker(); return; }
+  openEmojiPicker(anchorBtn, onPick);
+}
+
 function renderMembers() {
   const ul = $('member-list');
   ul.innerHTML = state.members.length ? '' : '<li class="empty">No members yet.</li>';
   for (const m of state.members) {
     const li = document.createElement('li');
     if (m.id === meId) li.classList.add('me');
-    li.innerHTML = `<span style="font-size:1.1rem">${esc(m.emoji || '👤')}</span>
+    li.innerHTML = `<button type="button" class="emoji-btn row-emoji" title="Change emoji" aria-label="Change emoji for ${esc(m.name)}">${esc(m.emoji || '👤')}</button>
       <span class="mname">${esc(m.name)}</span>
       <button class="btn small" data-act="rename">Rename</button>
       <button class="btn small danger" data-act="delete">Delete</button>`;
+    const emojiBtn = li.querySelector('.row-emoji');
+    emojiBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      toggleEmojiPicker(emojiBtn, async (emoji) => {
+        try {
+          await api('PATCH', '/api/members/' + encodeURIComponent(m.id), { name: m.name, emoji: (emoji || '').trim() });
+          await refresh();
+        } catch (e) { showError('member-error', e.message); }
+      });
+    });
     li.querySelector('[data-act="rename"]').addEventListener('click', async () => {
       const name = window.prompt('New name for ' + m.name + ':', m.name);
       if (name === null) return;
-      const emoji = window.prompt('Emoji (optional):', m.emoji || '');
-      try {
-        await api('PATCH', '/api/members/' + encodeURIComponent(m.id), {
-          name: name.trim(),
-          emoji: (emoji || '').trim(),
-        });
-        await refresh();
-        toast('Member renamed');
-      } catch (e) { showError('member-error', e.message); }
+      toggleEmojiPicker(emojiBtn, async (emoji) => {
+        try {
+          await api('PATCH', '/api/members/' + encodeURIComponent(m.id), {
+            name: name.trim(),
+            emoji: (emoji || '').trim(),
+          });
+          await refresh();
+          toast('Member updated');
+        } catch (e) { showError('member-error', e.message); }
+      });
     });
     li.querySelector('[data-act="delete"]').addEventListener('click', async () => {
       if (!window.confirm('Delete ' + m.name + '? (Only possible if unused in expenses/payments.)')) return;
@@ -478,9 +543,19 @@ function bindEvents() {
       await api('POST', '/api/members', { name, emoji });
       $('member-name').value = '';
       $('member-emoji').value = '';
+      $('member-emoji-btn').textContent = EMOJI_DEFAULT;
+      closeEmojiPicker();
       await refresh();
       toast('Member added');
     } catch (e) { showError('member-error', e.message); }
+  });
+
+  $('member-emoji-btn').addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    toggleEmojiPicker($('member-emoji-btn'), (emoji) => {
+      $('member-emoji').value = emoji;
+      $('member-emoji-btn').textContent = emoji || EMOJI_DEFAULT;
+    });
   });
 
   $('me-select').addEventListener('change', (ev) => {
