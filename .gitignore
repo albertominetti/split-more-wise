@@ -1,0 +1,16 @@
+# Dependencies (none, but ignored just in case)
+node_modules/
+
+# Runtime data and logs
+data.json
+server.log
+*.log
+
+# Local deployment helper (container-specific)
+restart.sh
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

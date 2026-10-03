@@ -1,0 +1,25 @@
+{
+  "name": "split-more-wise",
+  "version": "1.0.0",
+  "description": "Local-only group expense splitter (mini Splitwise) with a single-operator model: one person can record expenses on behalf of any member.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "splitwise",
+    "expenses",
+    "shared-expenses",
+    "settle-up",
+    "node",
+    "vanilla-js",
+    "zero-dependencies",
+    "self-hosted"
+  ],
+  "author": "Alberto Minetti",
+  "license": "MIT",
+  "private": true
+}

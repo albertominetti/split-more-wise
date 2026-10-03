@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Split: a local-only mini Splitwise. Record group expenses, track balances, and settle up." />
+  <title>Split · shared expenses</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="brand-emoji" aria-hidden="true">🧾</span> Split</div>
+      <div class="topbar-right">
+        <div class="total-pill" title="Total of all recorded expenses">
+          <span class="total-label">Total spent</span>
+          <strong id="total-spent">CHF 0.00</strong>
+        </div>
+        <label class="me-picker" title="Highlight your own share (display only; anyone can record for anyone)">
+          🙋
+          <select id="me-select" aria-label="Who am I (highlight only)">
+            <option value="">Who am I? (off)</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+    <!-- Dashboard -->
+    <section class="card dashboard" aria-label="Dashboard summary">
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-label">Total spent</span>
+          <strong id="stat-total">CHF 0.00</strong>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Expenses</span>
+          <strong id="stat-expenses">0</strong>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Members</span>
+          <strong id="stat-members">0</strong>
+        </div>
+        <div class="stat" id="stat-me-wrap" hidden>
+          <span class="stat-label">My balance</span>
+          <strong id="stat-me">—</strong>
+        </div>
+      </div>
+      <div class="settleup">
+        <h2>Settle up</h2>
+        <p class="hint">Fewest payments to square everyone up (greedy min-cash-flow).</p>
+        <ul id="settleup-list" class="settleup-list"></ul>
+      </div>
+    </section>
+
+    <div class="layout">
+      <div class="col-main">
+        <!-- Balances -->
+        <section class="card" aria-label="Balances">
+          <h2>Balances</h2>
+          <p class="hint">Positive = is owed money · Negative = owes money.</p>
+          <ul id="balance-list" class="balance-list"></ul>
+        </section>
+
+        <!-- Add expense -->
+        <section class="card" aria-label="Add expense">
+          <h2 id="expense-form-title">Add expense</h2>
+          <p class="hint">One person records on behalf of anyone: the payer can be <em>any</em> member.</p>
+          <form id="expense-form" novalidate>
+            <div class="grid2">
+              <label>What?
+                <input id="exp-description" type="text" placeholder="e.g. Groceries at Coop" maxlength="200" required />
+              </label>
+              <label>Amount (CHF)
+                <input id="exp-amount" type="number" min="0.01" step="0.01" placeholder="42.50" required />
+              </label>
+            </div>
+            <div class="grid3">
+              <label>Date
+                <input id="exp-date" type="date" required />
+              </label>
+              <label>Paid by (anyone)
+                <select id="exp-payer" required></select>
+              </label>
+              <label>Category
+                <select id="exp-category">
+                  <option value="">—</option>
+                  <option>Food</option>
+                  <option>Transport</option>
+                  <option>Housing</option>
+                  <option>Fun</option>
+                  <option>Shopping</option>
+                  <option>Health</option>
+                  <option>Other</option>
+                </select>
+              </label>
+            </div>
+
+            <fieldset class="splitmode">
+              <legend>Split mode</legend>
+              <label><input type="radio" name="splitMode" value="equal" checked /> Equal</label>
+              <label><input type="radio" name="splitMode" value="shares" /> By shares</label>
+              <label><input type="radio" name="splitMode" value="exact" /> By exact amounts</label>
+            </fieldset>
+
+            <div id="exp-participants" class="participants"></div>
+            <div id="exp-preview" class="preview" aria-live="polite"></div>
+            <div id="exp-error" class="error" role="alert" hidden></div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn primary" id="exp-submit">Add expense</button>
+              <button type="button" class="btn" id="exp-cancel" hidden>Cancel edit</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Expense list -->
+        <section class="card" aria-label="Expenses">
+          <h2>Expenses <span class="count" id="expense-count"></span></h2>
+          <ul id="expense-list" class="expense-list"></ul>
+        </section>
+      </div>
+
+      <div class="col-side">
+        <!-- Settlements -->
+        <section class="card" aria-label="Settlements">
+          <h2>Record a payment</h2>
+          <p class="hint">A direct repayment between two members. Adjusts balances.</p>
+          <form id="settlement-form" novalidate>
+            <div class="grid2">
+              <label>From (pays)
+                <select id="settle-from" required></select>
+              </label>
+              <label>To (receives)
+                <select id="settle-to" required></select>
+              </label>
+            </div>
+            <div class="grid2">
+              <label>Amount (CHF)
+                <input id="settle-amount" type="number" min="0.01" step="0.01" placeholder="20.00" required />
+              </label>
+              <label>Date
+                <input id="settle-date" type="date" required />
+              </label>
+            </div>
+            <label>Note (optional)
+              <input id="settle-note" type="text" maxlength="200" placeholder="e.g. Twint repayment" />
+            </label>
+            <div id="settle-error" class="error" role="alert" hidden></div>
+            <div class="form-actions">
+              <button type="submit" class="btn primary">Record payment</button>
+            </div>
+          </form>
+          <h3 class="sub">Payments</h3>
+          <ul id="settlement-list" class="settlement-list"></ul>
+        </section>
+
+        <!-- Members -->
+        <section class="card" aria-label="Members">
+          <h2>Members</h2>
+          <ul id="member-list" class="member-list"></ul>
+          <form id="member-form" class="member-form" novalidate>
+            <input id="member-name" type="text" placeholder="Name (e.g. Sam)" maxlength="60" required aria-label="Member name" />
+            <input id="member-emoji" type="text" placeholder="😀" maxlength="8" aria-label="Emoji (optional)" class="emoji-input" />
+            <button type="submit" class="btn primary">Add</button>
+          </form>
+          <div id="member-error" class="error" role="alert" hidden></div>
+        </section>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <span>Split · local-only · single operator, no login · all data in <code>data.json</code> · amounts in CHF</span>
+    </footer>
+  </main>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
