@@ -127,24 +127,15 @@ function renderAll() {
 }
 
 function renderStats() {
-  $('total-spent').textContent = fmt(summary.totalSpent || 0);
   $('stat-total').textContent = fmt(summary.totalSpent || 0);
   $('stat-expenses').textContent = String(state.expenses.length);
   $('stat-members').textContent = String(state.members.length);
-  const wrap = $('stat-me-wrap');
-  if (meId && state.members.some((m) => m.id === meId)) {
-    wrap.hidden = false;
-    const b = summary.balances[meId] || 0;
-    const el = $('stat-me');
-    el.textContent = (b > 0 ? '+' : '') + fmt(b).replace('CHF ', 'CHF ');
-    el.style.color = b > 0.005 ? 'var(--good)' : b < -0.005 ? 'var(--bad)' : 'var(--muted)';
-  } else {
-    wrap.hidden = true;
-  }
-  // "Who am I" selector options
+  const toSettle = (summary.settleUp || []).reduce((a, s) => a + (Number(s.amount) || 0), 0);
+  $('stat-settle').textContent = fmt(toSettle);
+  // "Who am I" selector options (in the Members view)
   const sel = $('me-select');
   const cur = sel.value || meId;
-  sel.innerHTML = '<option value="">Who am I? (off)</option>' +
+  sel.innerHTML = '<option value="">Off (no highlight)</option>' +
     state.members.map((m) => `<option value="${esc(m.id)}">${esc((m.emoji ? m.emoji + ' ' : '') + m.name)}</option>`).join('');
   sel.value = state.members.some((m) => m.id === meId) ? meId : '';
   if (cur !== sel.value && cur) { /* selection changed externally; ignore */ }
