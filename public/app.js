@@ -476,14 +476,16 @@ function renderExpenses() {
     const li = document.createElement('li');
     const cur = e.currency || baseCurrency;
     const foreign = cur !== baseCurrency && e.amountBase != null;
-    const baseNote = foreign ? ` <span class="fxnote">≈ ${esc(fmtCur(baseCurrency, e.amountBase))}</span>` : '';
-    const rateNote = foreign && e.fx && e.fx.rate
-      ? ` · 1 ${esc(cur)} = ${esc(Number(e.fx.rate).toFixed(4))} ${esc(baseCurrency)} (${esc(e.fx.rateDate || '')})`
-      : '';
+    const equiv = foreign ? `<span class="exp-eq">≈ ${esc(fmtCur(baseCurrency, e.amountBase))}</span>` : '';
     const shares = (e.split || []).map((s) => `<span>${esc(memberName(s.memberId))}: ${esc(fmtCur(cur, s.share))}</span>`).join('');
     li.innerHTML = `
-      <div class="exp-head"><strong>${esc(e.description)}</strong><span class="exp-amount">${esc(fmtCur(cur, e.amount))}${baseNote}</span></div>
-      <div class="exp-meta">paid by <strong>${esc(memberName(e.paidBy))}</strong> · ${esc(e.date)} ${e.category ? `<span class="cat">${esc(e.category)}</span>` : ''}${rateNote}</div>
+      <div class="exp-head"><strong class="exp-desc">${esc(e.description)}</strong><span class="exp-amount">${esc(fmtCur(cur, e.amount))}</span></div>
+      <div class="exp-meta">
+        <span>paid by <strong>${esc(memberName(e.paidBy))}</strong></span>
+        <span>${esc(e.date)}</span>
+        ${e.category ? `<span class="cat">${esc(e.category)}</span>` : ''}
+        ${equiv}
+      </div>
       <div class="exp-shares">${shares}</div>
       <div class="exp-actions">
         <button class="btn small" data-act="edit">Edit</button>

@@ -208,8 +208,13 @@ input:focus, select:focus, button:focus { outline: 2px solid var(--brand); outli
 }
 .exp-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .exp-head strong { font-size: 0.98rem; }
-.exp-amount { font-weight: 800; white-space: nowrap; }
-.exp-meta { color: var(--muted); font-size: 0.82rem; margin: 2px 0 6px; }
+.exp-desc { flex: 1; min-width: 0; }
+.exp-amount { font-weight: 800; white-space: nowrap; flex: 0 0 auto; }
+.exp-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  color: var(--muted); font-size: 0.82rem; margin: 6px 0;
+}
+.exp-eq { color: var(--muted); }
 .exp-shares { font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 6px; }
 .exp-shares span { background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; }
 .exp-actions { margin-top: 8px; display: flex; gap: 6px; }
