@@ -24,6 +24,59 @@ const memberName = (id) => {
   return m ? (m.emoji ? m.emoji + ' ' + m.name : m.name) : '(removed)';
 };
 
+// ---------------------------------------------------- views / burger ----
+const VIEWS = [
+  { id: 'summary', label: 'Summary' },
+  { id: 'new-expense', label: 'New expense' },
+  { id: 'balance', label: 'Balance' },
+  { id: 'new-payment', label: 'New payment' },
+  { id: 'members', label: 'Members' },
+  { id: 'expenses', label: 'Expenses' },
+];
+let currentView = 'summary';
+
+function showView(id) {
+  if (!VIEWS.some((v) => v.id === id)) id = 'summary';
+  currentView = id;
+  document.querySelectorAll('section[data-view]').forEach((sec) => {
+    sec.hidden = sec.dataset.view !== id;
+  });
+  document.querySelectorAll('.nav-item').forEach((btn) => {
+    const on = btn.dataset.view === id;
+    btn.classList.toggle('active', on);
+    if (on) btn.setAttribute('aria-current', 'page');
+    else btn.removeAttribute('aria-current');
+  });
+  const vt = $('view-title');
+  if (vt) vt.textContent = (VIEWS.find((v) => v.id === id) || {}).label || '';
+  localStorage.setItem('split.view', id);
+  closeMenu();
+}
+
+function openMenu() {
+  const d = $('nav-drawer'), b = $('nav-backdrop'), m = $('menu-btn');
+  d.classList.add('open');
+  b.hidden = false;
+  b.classList.add('open');
+  d.removeAttribute('inert');
+  m.setAttribute('aria-expanded', 'true');
+  m.setAttribute('aria-label', 'Close menu');
+}
+function closeMenu() {
+  const d = $('nav-drawer'), b = $('nav-backdrop'), m = $('menu-btn');
+  if (!d) return;
+  d.classList.remove('open');
+  b.classList.remove('open');
+  b.hidden = true;
+  d.setAttribute('inert', '');
+  m.setAttribute('aria-expanded', 'false');
+  m.setAttribute('aria-label', 'Open menu');
+}
+function toggleMenu() {
+  if ($('nav-drawer').classList.contains('open')) closeMenu();
+  else openMenu();
+}
+
 let toastTimer = null;
 function toast(msg) {
   const el = $('toast');
@@ -114,7 +167,7 @@ function renderSettleUp() {
     $('settle-amount').value = Number(b.dataset.amount).toFixed(2);
     $('settle-date').value = todayISO();
     $('settle-note').value = '';
-    $('settlement-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showView('new-payment');
     toast('Payment pre-filled. Hit "Record payment".');
   }));
 }
@@ -428,7 +481,7 @@ function startEditExpense(e) {
   }
   renderParticipants();
   updatePreview();
-  $('expense-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  showView('new-expense');
 }
 
 function resetExpenseForm() {
@@ -507,6 +560,7 @@ function bindEvents() {
       }
       resetExpenseForm();
       await refresh();
+      showView('expenses');
     } catch (e) { showError('exp-error', e.message); }
   });
 
@@ -529,6 +583,7 @@ function bindEvents() {
       $('settle-amount').value = '';
       $('settle-note').value = '';
       await refresh();
+      showView('summary');
       toast('Payment recorded');
     } catch (e) { showError('settle-error', e.message); }
   });
@@ -564,6 +619,13 @@ function bindEvents() {
     else localStorage.removeItem('split.meId');
     renderAll();
   });
+
+  // Burger menu navigation
+  $('menu-btn').addEventListener('click', (ev) => { ev.stopPropagation(); toggleMenu(); });
+  $('nav-backdrop').addEventListener('click', closeMenu);
+  document.querySelectorAll('.nav-item').forEach((btn) =>
+    btn.addEventListener('click', () => showView(btn.dataset.view)));
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMenu(); });
 }
 
 // ------------------------------------------------------------------- boot --
@@ -571,6 +633,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('exp-date').value = todayISO();
   $('settle-date').value = todayISO();
   bindEvents();
+  showView(localStorage.getItem('split.view') || 'summary');
   try {
     await refresh();
   } catch (e) {

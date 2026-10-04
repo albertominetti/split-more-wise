@@ -259,3 +259,46 @@ input:focus, select:focus, button:focus { outline: 2px solid var(--brand); outli
   border-radius: 999px; padding: 3px 9px; font-size: 0.68rem; font-weight: 800;
   letter-spacing: 0.09em; text-transform: uppercase;
 }
+
+/* Burger menu + view navigation */
+[data-view][hidden] { display: none; }
+
+.menu-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 42px; height: 40px; padding: 0; flex: 0 0 auto;
+  border: 1px solid var(--line); background: #fff; border-radius: 10px; cursor: pointer;
+}
+.menu-btn:hover { background: var(--bg); }
+.menu-bars { display: grid; gap: 4px; }
+.menu-bars span { display: block; width: 20px; height: 2px; border-radius: 2px; background: var(--ink); }
+.view-title { color: var(--muted); font-weight: 700; font-size: 0.95rem; margin-right: auto; }
+@media (max-width: 640px) { .view-title { display: none; } }
+
+.nav-drawer {
+  position: fixed; top: 0; left: 0; height: 100vh; height: 100dvh; width: min(80vw, 296px);
+  background: #fff; border-right: 1px solid var(--line);
+  box-shadow: 0 12px 40px rgba(22, 33, 58, 0.18);
+  padding: 14px 10px; z-index: 60;
+  display: flex; flex-direction: column; gap: 4px; overflow-y: auto;
+  transform: translateX(-102%); visibility: hidden;
+  transition: transform 0.2s ease, visibility 0.2s ease;
+}
+.nav-drawer.open { transform: translateX(0); visibility: visible; }
+.nav-head {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--muted); font-weight: 800; padding: 6px 12px 8px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  border: 0; background: transparent; color: var(--ink);
+  padding: 12px; border-radius: 10px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+}
+.nav-item:hover { background: var(--bg); }
+.nav-item.active { background: var(--brand); color: #fff; }
+.nav-ico { width: 22px; text-align: center; font-size: 1.05rem; flex: 0 0 auto; }
+.nav-backdrop {
+  position: fixed; inset: 0; z-index: 55; background: rgba(22, 33, 58, 0.38);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+}
+.nav-backdrop.open { opacity: 1; pointer-events: auto; }
+.nav-backdrop[hidden] { display: none; }

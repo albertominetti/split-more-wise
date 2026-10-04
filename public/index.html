@@ -11,7 +11,11 @@
 <body>
   <header class="topbar">
     <div class="topbar-inner">
+      <button type="button" class="menu-btn" id="menu-btn" aria-label="Open menu" aria-haspopup="true" aria-expanded="false" aria-controls="nav-drawer">
+        <span class="menu-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+      </button>
       <div class="brand"><span class="brand-emoji" aria-hidden="true">🧾</span> Split More Wise</div>
+      <span class="view-title" id="view-title">Summary</span>
       <div class="topbar-right">
         <span class="demo-badge" id="demo-badge" hidden title="Public demo: sample data, resets periodically">DEMO</span>
         <div class="total-pill" title="Total of all recorded expenses">
@@ -28,11 +32,23 @@
     </div>
   </header>
 
+  <!-- Burger menu drawer -->
+  <nav class="nav-drawer" id="nav-drawer" aria-label="Sections" inert>
+    <div class="nav-head">Sections</div>
+    <button type="button" class="nav-item active" data-view="summary"><span class="nav-ico" aria-hidden="true">📊</span> Summary</button>
+    <button type="button" class="nav-item" data-view="new-expense"><span class="nav-ico" aria-hidden="true">➕</span> New expense</button>
+    <button type="button" class="nav-item" data-view="balance"><span class="nav-ico" aria-hidden="true">⚖️</span> Balance</button>
+    <button type="button" class="nav-item" data-view="new-payment"><span class="nav-ico" aria-hidden="true">💸</span> New payment</button>
+    <button type="button" class="nav-item" data-view="members"><span class="nav-ico" aria-hidden="true">👥</span> Members</button>
+    <button type="button" class="nav-item" data-view="expenses"><span class="nav-ico" aria-hidden="true">🧾</span> Expenses</button>
+  </nav>
+  <div class="nav-backdrop" id="nav-backdrop" hidden></div>
+
   <main class="container">
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-    <!-- Dashboard -->
-    <section class="card dashboard" aria-label="Dashboard summary">
+    <!-- Summary -->
+    <section class="card dashboard" data-view="summary" aria-label="Dashboard summary">
       <div class="stats">
         <div class="stat">
           <span class="stat-label">Total spent</span>
@@ -58,124 +74,118 @@
       </div>
     </section>
 
-    <div class="layout">
-      <div class="col-main">
-        <!-- Balances -->
-        <section class="card" aria-label="Balances">
-          <h2>Balances</h2>
-          <p class="hint">Positive = is owed money · Negative = owes money.</p>
-          <ul id="balance-list" class="balance-list"></ul>
-        </section>
+    <!-- Add expense -->
+    <section class="card" data-view="new-expense" aria-label="Add expense" hidden>
+      <h2 id="expense-form-title">Add expense</h2>
+      <p class="hint">One person records on behalf of anyone: the payer can be <em>any</em> member.</p>
+      <form id="expense-form" novalidate>
+        <div class="grid2">
+          <label>What?
+            <input id="exp-description" type="text" placeholder="e.g. Groceries at Coop" maxlength="200" required />
+          </label>
+          <label>Amount (CHF)
+            <input id="exp-amount" type="number" min="0.01" step="0.01" placeholder="42.50" required />
+          </label>
+        </div>
+        <div class="grid3">
+          <label>Date
+            <input id="exp-date" type="date" required />
+          </label>
+          <label>Paid by (anyone)
+            <select id="exp-payer" required></select>
+          </label>
+          <label>Category
+            <select id="exp-category">
+              <option value="">—</option>
+              <option>Food</option>
+              <option>Transport</option>
+              <option>Housing</option>
+              <option>Fun</option>
+              <option>Shopping</option>
+              <option>Health</option>
+              <option>Other</option>
+            </select>
+          </label>
+        </div>
 
-        <!-- Add expense -->
-        <section class="card" aria-label="Add expense">
-          <h2 id="expense-form-title">Add expense</h2>
-          <p class="hint">One person records on behalf of anyone: the payer can be <em>any</em> member.</p>
-          <form id="expense-form" novalidate>
-            <div class="grid2">
-              <label>What?
-                <input id="exp-description" type="text" placeholder="e.g. Groceries at Coop" maxlength="200" required />
-              </label>
-              <label>Amount (CHF)
-                <input id="exp-amount" type="number" min="0.01" step="0.01" placeholder="42.50" required />
-              </label>
-            </div>
-            <div class="grid3">
-              <label>Date
-                <input id="exp-date" type="date" required />
-              </label>
-              <label>Paid by (anyone)
-                <select id="exp-payer" required></select>
-              </label>
-              <label>Category
-                <select id="exp-category">
-                  <option value="">—</option>
-                  <option>Food</option>
-                  <option>Transport</option>
-                  <option>Housing</option>
-                  <option>Fun</option>
-                  <option>Shopping</option>
-                  <option>Health</option>
-                  <option>Other</option>
-                </select>
-              </label>
-            </div>
+        <fieldset class="splitmode">
+          <legend>Split mode</legend>
+          <label><input type="radio" name="splitMode" value="equal" checked /> Equal</label>
+          <label><input type="radio" name="splitMode" value="shares" /> By shares</label>
+          <label><input type="radio" name="splitMode" value="exact" /> By exact amounts</label>
+        </fieldset>
 
-            <fieldset class="splitmode">
-              <legend>Split mode</legend>
-              <label><input type="radio" name="splitMode" value="equal" checked /> Equal</label>
-              <label><input type="radio" name="splitMode" value="shares" /> By shares</label>
-              <label><input type="radio" name="splitMode" value="exact" /> By exact amounts</label>
-            </fieldset>
+        <div id="exp-participants" class="participants"></div>
+        <div id="exp-preview" class="preview" aria-live="polite"></div>
+        <div id="exp-error" class="error" role="alert" hidden></div>
 
-            <div id="exp-participants" class="participants"></div>
-            <div id="exp-preview" class="preview" aria-live="polite"></div>
-            <div id="exp-error" class="error" role="alert" hidden></div>
+        <div class="form-actions">
+          <button type="submit" class="btn primary" id="exp-submit">Add expense</button>
+          <button type="button" class="btn" id="exp-cancel" hidden>Cancel edit</button>
+        </div>
+      </form>
+    </section>
 
-            <div class="form-actions">
-              <button type="submit" class="btn primary" id="exp-submit">Add expense</button>
-              <button type="button" class="btn" id="exp-cancel" hidden>Cancel edit</button>
-            </div>
-          </form>
-        </section>
+    <!-- Balances -->
+    <section class="card" data-view="balance" aria-label="Balances" hidden>
+      <h2>Balances</h2>
+      <p class="hint">Positive = is owed money · Negative = owes money.</p>
+      <ul id="balance-list" class="balance-list"></ul>
+    </section>
 
-        <!-- Expense list -->
-        <section class="card" aria-label="Expenses">
-          <h2>Expenses <span class="count" id="expense-count"></span></h2>
-          <ul id="expense-list" class="expense-list"></ul>
-        </section>
-      </div>
+    <!-- Record a payment -->
+    <section class="card" data-view="new-payment" aria-label="Settlements" hidden>
+      <h2>Record a payment</h2>
+      <p class="hint">A direct repayment between two members. Adjusts balances.</p>
+      <form id="settlement-form" novalidate>
+        <div class="grid2">
+          <label>From (pays)
+            <select id="settle-from" required></select>
+          </label>
+          <label>To (receives)
+            <select id="settle-to" required></select>
+          </label>
+        </div>
+        <div class="grid2">
+          <label>Amount (CHF)
+            <input id="settle-amount" type="number" min="0.01" step="0.01" placeholder="20.00" required />
+          </label>
+          <label>Date
+            <input id="settle-date" type="date" required />
+          </label>
+        </div>
+        <label>Note (optional)
+          <input id="settle-note" type="text" maxlength="200" placeholder="e.g. Twint repayment" />
+        </label>
+        <div id="settle-error" class="error" role="alert" hidden></div>
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Record payment</button>
+        </div>
+      </form>
+      <h3 class="sub">Payments</h3>
+      <ul id="settlement-list" class="settlement-list"></ul>
+    </section>
 
-      <div class="col-side">
-        <!-- Settlements -->
-        <section class="card" aria-label="Settlements">
-          <h2>Record a payment</h2>
-          <p class="hint">A direct repayment between two members. Adjusts balances.</p>
-          <form id="settlement-form" novalidate>
-            <div class="grid2">
-              <label>From (pays)
-                <select id="settle-from" required></select>
-              </label>
-              <label>To (receives)
-                <select id="settle-to" required></select>
-              </label>
-            </div>
-            <div class="grid2">
-              <label>Amount (CHF)
-                <input id="settle-amount" type="number" min="0.01" step="0.01" placeholder="20.00" required />
-              </label>
-              <label>Date
-                <input id="settle-date" type="date" required />
-              </label>
-            </div>
-            <label>Note (optional)
-              <input id="settle-note" type="text" maxlength="200" placeholder="e.g. Twint repayment" />
-            </label>
-            <div id="settle-error" class="error" role="alert" hidden></div>
-            <div class="form-actions">
-              <button type="submit" class="btn primary">Record payment</button>
-            </div>
-          </form>
-          <h3 class="sub">Payments</h3>
-          <ul id="settlement-list" class="settlement-list"></ul>
-        </section>
+    <!-- Members -->
+    <section class="card" data-view="members" aria-label="Members" hidden>
+      <h2>Members</h2>
+      <ul id="member-list" class="member-list"></ul>
+      <form id="member-form" class="member-form" novalidate>
+        <div class="emoji-field">
+          <button type="button" id="member-emoji-btn" class="emoji-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Choose an emoji (optional)" title="Choose an emoji">😀</button>
+          <input type="hidden" id="member-emoji" value="" />
+        </div>
+        <input id="member-name" type="text" placeholder="Name (e.g. Sam)" maxlength="60" required aria-label="Member name" />
+        <button type="submit" class="btn primary">Add</button>
+      </form>
+      <div id="member-error" class="error" role="alert" hidden></div>
+    </section>
 
-        <!-- Members -->
-        <section class="card" aria-label="Members">
-          <h2>Members</h2>
-          <ul id="member-list" class="member-list"></ul>
-          <form id="member-form" class="member-form" novalidate>
-            <div class="emoji-field">
-              <button type="button" id="member-emoji-btn" class="emoji-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Choose an emoji (optional)" title="Choose an emoji">😀</button>
-              <input type="hidden" id="member-emoji" value="" />
-            </div>
-            <input id="member-name" type="text" placeholder="Name (e.g. Sam)" maxlength="60" required aria-label="Member name" />
-            <button type="submit" class="btn primary">Add</button>
-          </form>
-          <div id="member-error" class="error" role="alert" hidden></div>
-        </section>
-      </div>
-    </div>
+    <!-- Expense list -->
+    <section class="card" data-view="expenses" aria-label="Expenses" hidden>
+      <h2>Expenses <span class="count" id="expense-count"></span></h2>
+      <ul id="expense-list" class="expense-list"></ul>
+    </section>
 
     <footer class="footer">
       <span>Split More Wise · local-only · single operator, no login · all data in <code>data.json</code> · amounts in CHF</span>
