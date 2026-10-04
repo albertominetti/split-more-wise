@@ -107,7 +107,28 @@ body {
 .badge.zero { background: var(--bg); color: var(--muted); }
 .me { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 8px; }
 .empty { color: var(--muted); font-size: 0.9rem; }
-.settle-btn { margin-left: 8px; }
+.settle-btn { margin-left: 0; }
+
+/* Settle up rows: keep each row on a single line on narrow screens */
+.settleup-list li { flex-wrap: nowrap; gap: 6px; }
+.settleup-list li > span:first-child {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.settleup-list li > span:last-child {
+  display: inline-flex; align-items: center; gap: 6px;
+  flex: 0 0 auto; white-space: nowrap;
+}
+.settleup-list .settle-btn { padding: 4px 9px; font-size: 0.78rem; }
+@media (max-width: 480px) {
+  .settleup-list li { padding: 8px 2px; font-size: 0.84rem; gap: 6px; }
+  .settleup-list li strong { font-size: 0.84rem; }
+  .settleup-list .settle-btn { padding: 3px 7px; font-size: 0.71rem; }
+}
+@media (max-width: 380px) {
+  .settleup-list li { font-size: 0.8rem; gap: 5px; }
+  .settleup-list li strong { font-size: 0.8rem; }
+  .settleup-list .settle-btn { padding: 3px 6px; font-size: 0.68rem; }
+}
 
 /* Forms */
 label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; }
