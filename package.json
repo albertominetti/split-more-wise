@@ -1,7 +1,7 @@
 {
   "name": "split-more-wise",
   "version": "1.0.0",
-  "description": "Local-only group expense splitter (mini Splitwise) with a single-operator model: one person can record expenses on behalf of any member.",
+  "description": "Self-hosted group expense splitter (mini Splitwise) with a single-operator model: one person can record expenses on behalf of any member.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

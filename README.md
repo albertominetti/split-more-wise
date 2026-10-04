@@ -1,13 +1,17 @@
 # Split More Wise
 
-A local-only group expense splitter (a mini Splitwise) built around a **single-operator**
+A **self-hosted** group expense splitter (a mini Splitwise) built around a **single-operator**
 model: one person uses the app and can record expenses **on behalf of anyone** in the group.
 
 - The **payer can be any member**, not just the operator.
 - **Participants can be any subset** of members.
+- **Self-hosted**: run it yourself (locally, in Docker, on a VPS, or on Render). All data
+  stays on your own server; there is no third-party backend.
 - No login, no accounts, no multi-user auth. It is a single-operator tool.
 - Zero npm dependencies: the backend uses only the Node.js standard library.
-- The frontend is vanilla HTML, CSS and JavaScript. No frameworks, no CDN, no build step, fully offline.
+- The frontend is vanilla HTML, CSS and JavaScript. No frameworks, no CDN, no build step.
+  It works offline; only the multi-currency exchange-rate lookup needs network.
+- Multi-currency (CHF, EUR, USD, GBP) with ECB reference rates.
 
 **Live demo:** <https://split-more-wise.onrender.com> (public demo with sample data, resets every 30 minutes).
 
@@ -42,6 +46,12 @@ data file seeds a small example group so the interface is immediately usable.
 All screenshots use the mobile layout, emulated on an iPhone 14 Pro (393 x 852 viewport,
 3x device pixel ratio, mobile user agent and touch input).
 
+Navigation menu and the Members view (base currency and "Who am I"):
+
+| Menu | Members |
+|---|---|
+| ![Navigation menu](docs/screenshots/06-menu.png) | ![Members](docs/screenshots/07-members.png) |
+
 Adding an expense, with the live split preview for each split mode:
 
 | Equal | By shares | By exact amounts |
@@ -56,36 +66,41 @@ Settle-up pre-fill and the expense list:
 
 ## Features
 
-1. **Members**: add, rename and delete members. A member cannot be deleted while it is
+1. **Navigation**: a burger menu switches between the sections (Summary, New expense,
+   Balance, New payment, Members, Expenses); only one is shown at a time. The choice is
+   remembered across reloads.
+2. **Members**: add, rename and delete members. A member cannot be deleted while it is
    referenced by an expense or a settlement (the API returns `409`). The member list
    shows each person's current balance.
-2. **Add an expense**: description, amount and currency (CHF/EUR/USD/GBP), date (defaults
+3. **Add an expense**: description, amount and currency (CHF/EUR/USD/GBP), date (defaults
    to today), a payer dropdown with **any** member, participant checkboxes, and three split modes:
    - equal,
    - by shares,
    - by exact amounts.
 
-   A live preview shows each person's share, and the split is validated so that the
-   shares always sum to the total.
-3. **Expense list**: newest first, with description, amount, payer, per-person shares and
-   category, plus edit and delete.
-4. **Balances**: net balance per member (positive means the person is owed money,
+   A live preview shows each person's share (and, for a foreign currency, the converted
+   total), and the split is validated so that the shares always sum to the total.
+4. **Expense list**: newest first, with description, amount, payer, per-person shares and
+   category, plus edit and delete. Foreign-currency expenses show the original amount and
+   the equivalent in the base currency.
+5. **Balances**: net balance per member (positive means the person is owed money,
    negative means the person owes money), together with a **who owes whom** settle-up
    list computed with a greedy min-cash-flow algorithm (repeatedly matching the largest
    debtor with the largest creditor).
-5. **Settlements (payments)**: record a direct repayment between two members, which
-   adjusts the balances. Payments are listed newest first and can be deleted.
-6. **Dashboard**: total spent, counts, per-member balances and settle-up suggestions with
-   a one-click **Settle** pre-fill.
-7. **Who am I** selector (optional): a pure display highlight stored in `localStorage`.
-   It never restricts who can record what.
-8. **Multi-currency**: pick the **base currency** (CHF/EUR/USD/GBP) in the Members view; the
-   dashboard total and the settle-up are shown in it. Each expense can be recorded in any
+6. **Settlements (payments)**: record a direct repayment between two members (in the base
+   currency), which adjusts the balances. Payments are listed newest first and can be deleted.
+7. **Dashboard (Summary)**: four tiles (total spent, number of expenses, number of members,
+   and the total still **to settle**), plus the settle-up suggestions with a one-click
+   **Settle** pre-fill. Amounts are shown in the base currency.
+8. **Who am I** selector (optional, in the Members view): a pure display highlight stored in
+   `localStorage`. It never restricts who can record what.
+9. **Multi-currency**: pick the **base currency** (CHF/EUR/USD/GBP) in the Members view; the
+   summary total and the settle-up are shown in it. Each expense can be recorded in any
    supported currency and is converted to the base currency at the **ECB reference rate for
    the expense date** (via [Frankfurter](https://frankfurter.dev), no API key). Rates are
-   cached per day in the data file. The original amount and the rate used are kept and shown
-   on the expense. Changing the base currency re-converts everything instantly: rates are
-   derived from a single CHF-based table, so nothing is rewritten.
+   cached per day in the data file. The original amount is kept and shown on the expense.
+   Changing the base currency re-converts everything instantly: rates are derived from a
+   single CHF-based table, so nothing is rewritten.
 
 ## Tech stack
 

@@ -1,4 +1,5 @@
-/* Split frontend: vanilla JS, no frameworks, works fully offline (same-origin only).
+/* Split frontend: vanilla JS, no frameworks, self-hosted (same-origin only).
+   Works offline except the multi-currency rate lookup, which needs network.
    Single operator tool: the payer dropdown can be ANY member; participants any subset. */
 
 'use strict';
