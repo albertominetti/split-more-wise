@@ -56,6 +56,10 @@ body {
 }
 .me-box label { margin: 0; }
 .me-box .hint { margin: 2px 0 8px; }
+.amount-field { display: flex; gap: 8px; align-items: flex-end; }
+.amount-field > label { flex: 1; min-width: 0; margin-bottom: 10px; }
+.amount-field .currency-label { flex: 0 0 92px; }
+.fxnote { color: var(--muted); font-weight: 600; font-size: 0.82rem; }
 
 /* Layout */
 .container { max-width: 1100px; margin: 0 auto; padding: 18px 16px 40px; }

@@ -59,8 +59,8 @@ Settle-up pre-fill and the expense list:
 1. **Members**: add, rename and delete members. A member cannot be deleted while it is
    referenced by an expense or a settlement (the API returns `409`). The member list
    shows each person's current balance.
-2. **Add an expense**: description, amount (CHF), date (defaults to today), a payer
-   dropdown with **any** member, participant checkboxes, and three split modes:
+2. **Add an expense**: description, amount and currency (CHF/EUR/USD/GBP), date (defaults
+   to today), a payer dropdown with **any** member, participant checkboxes, and three split modes:
    - equal,
    - by shares,
    - by exact amounts.
@@ -79,6 +79,13 @@ Settle-up pre-fill and the expense list:
    a one-click **Settle** pre-fill.
 7. **Who am I** selector (optional): a pure display highlight stored in `localStorage`.
    It never restricts who can record what.
+8. **Multi-currency**: pick the **base currency** (CHF/EUR/USD/GBP) in the Members view; the
+   dashboard total and the settle-up are shown in it. Each expense can be recorded in any
+   supported currency and is converted to the base currency at the **ECB reference rate for
+   the expense date** (via [Frankfurter](https://frankfurter.dev), no API key). Rates are
+   cached per day in the data file. The original amount and the rate used are kept and shown
+   on the expense. Changing the base currency re-converts everything instantly: rates are
+   derived from a single CHF-based table, so nothing is rewritten.
 
 ## Tech stack
 
@@ -168,8 +175,10 @@ appropriate HTTP status code.
 | `PATCH` / `DELETE` | `/api/expenses/:id` | Update / delete an expense |
 | `GET` / `POST` | `/api/settlements` | List settlements (newest first) / create one |
 | `DELETE` | `/api/settlements/:id` | Delete a settlement |
-| `GET` | `/api/summary` | `{ balances, settleUp, totalSpent }` |
-| `GET` | `/api/state` | Full state: `{ members, expenses, settlements }` |
+| `GET` | `/api/summary` | `{ balances, settleUp, totalSpent, baseCurrency }` (amounts in base currency) |
+| `GET` | `/api/state` | Full state: `{ members, expenses, settlements, settings }`; each expense carries a derived `amountBase` and `fx` |
+| `GET` | `/api/fx?from=&to=&date=` | Exchange rate for a date: `{ from, to, date, rate, rateDate }` |
+| `PUT` | `/api/settings` | Update settings, e.g. `{ baseCurrency }` |
 | `GET` | `/` | Static frontend served from `public/` |
 
 ## Data model
@@ -204,9 +213,12 @@ Settlement:
 }
 ```
 
-Amounts are entered in major units (for example `12.50` CHF). All arithmetic is performed
-in **integer cents** to avoid floating point drift; any rounding remainder is assigned to
-the first participant and the behaviour is mirrored on both client and server.
+Amounts are entered in major units (for example `12.50` CHF) in the expense's currency. All arithmetic
+is performed in **integer cents** to avoid floating point drift; any rounding remainder is assigned to
+the first participant and the behaviour is mirrored on both client and server. `currency` is one of
+`CHF`, `EUR`, `USD`, `GBP`. Amounts are converted to the group's base currency (`settings.baseCurrency`)
+using the ECB rate for the expense date; reads from `/api/state` also include a derived `amountBase`
+and `fx` object. The rate tables live under `fx.days` (one CHF-based table per date).
 
 ## Project structure
 

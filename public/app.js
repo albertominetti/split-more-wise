@@ -4,17 +4,22 @@
 'use strict';
 
 // ---------------------------------------------------------------- state ---
-let state = { members: [], expenses: [], settlements: [] };
-let summary = { balances: {}, settleUp: [], totalSpent: 0 };
+let state = { members: [], expenses: [], settlements: [], settings: { baseCurrency: 'CHF' } };
+let summary = { balances: {}, settleUp: [], totalSpent: 0, baseCurrency: 'CHF' };
 let editingExpenseId = null;
 let meId = localStorage.getItem('split.meId') || '';
+let baseCurrency = 'CHF';
+let currencies = ['CHF', 'EUR', 'USD', 'GBP'];
+let fxCache = {};
+let previewSeq = 0;
 // Participant widget state, preserved across re-renders: { memberId: { on, val } }
 let partState = {};
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) =>
   String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const fmt = (n) => 'CHF ' + Number(n).toFixed(2);
+const fmtCur = (cur, n) => (cur || baseCurrency) + ' ' + Number(n).toFixed(2);
+const fmt = (n) => fmtCur(baseCurrency, n);
 const todayISO = () => {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -110,6 +115,8 @@ async function refresh() {
   ]);
   state = st;
   summary = sum;
+  if (st.settings && st.settings.baseCurrency) baseCurrency = st.settings.baseCurrency;
+  if (sum.baseCurrency) baseCurrency = sum.baseCurrency;
   renderAll();
 }
 
@@ -120,10 +127,27 @@ function renderAll() {
   renderBalances();
   renderMembers();
   renderSelects();
+  renderCurrencies();
   renderParticipants();
   renderExpenses();
   renderSettlements();
   updatePreview();
+}
+
+function renderCurrencies() {
+  const bsel = $('base-currency');
+  if (bsel) {
+    bsel.innerHTML = currencies.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    bsel.value = baseCurrency;
+  }
+  const esel = $('exp-currency');
+  if (esel) {
+    const prev = esel.value;
+    esel.innerHTML = currencies.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    esel.value = currencies.includes(prev) ? prev : baseCurrency;
+  }
+  const lab = $('settle-cur-label');
+  if (lab) lab.textContent = baseCurrency;
 }
 
 function renderStats() {
@@ -323,6 +347,7 @@ function renderParticipants() {
     if (!state.members.some((m) => m.id === id)) delete partState[id];
   }
   const mode = splitMode();
+  const cur = $('exp-currency') ? ($('exp-currency').value || baseCurrency) : baseCurrency;
   box.innerHTML = '';
   if (!state.members.length) {
     box.innerHTML = '<div class="empty">Add members first, then split with them.</div>';
@@ -334,7 +359,7 @@ function renderParticipants() {
     row.className = 'part-row' + (st.on ? '' : ' off');
     const label = mode === 'equal' ? '' : mode === 'shares'
       ? `<input class="pval" type="number" min="0" step="1" value="${esc(st.val || '')}" placeholder="shares" aria-label="Shares for ${esc(m.name)}" ${st.on ? '' : 'disabled'} />`
-      : `<input class="pval" type="number" min="0" step="0.01" value="${esc(st.val || '')}" placeholder="CHF" aria-label="Exact amount for ${esc(m.name)}" ${st.on ? '' : 'disabled'} />`;
+      : `<input class="pval" type="number" min="0" step="0.01" value="${esc(st.val || '')}" placeholder="${esc(cur)}" aria-label="Exact amount for ${esc(m.name)}" ${st.on ? '' : 'disabled'} />`;
     row.innerHTML = `<input type="checkbox" ${st.on ? 'checked' : ''} aria-label="Include ${esc(m.name)}" />
       <span class="pname">${esc((m.emoji ? m.emoji + ' ' : '') + m.name)}</span>${label}`;
     const [cb] = [row.querySelector('input[type="checkbox"]')];
@@ -347,6 +372,7 @@ function renderParticipants() {
 
 // Compute the per-person split in integer cents (mirrors the server).
 function computePreview() {
+  const cur = $('exp-currency') ? ($('exp-currency').value || baseCurrency) : baseCurrency;
   const total = Math.round(Number($('exp-amount').value) * 100);
   const mode = splitMode();
   const ids = state.members.filter((m) => partState[m.id] && partState[m.id].on).map((m) => m.id);
@@ -380,29 +406,53 @@ function computePreview() {
       return {
         rows,
         sumCents: sum,
-        error: `Shares sum to ${fmt(sum / 100)} but total is ${fmt(total / 100)} (off by ${fmt((sum - total) / 100)}).`,
+        error: `Shares sum to ${fmtCur(cur, sum / 100)} but total is ${fmtCur(cur, total / 100)} (off by ${fmtCur(cur, (sum - total) / 100)}).`,
       };
     }
   }
   return { rows, sumCents: total };
 }
 
-function updatePreview() {
+async function updatePreview() {
+  const seq = ++previewSeq;
   const el = $('exp-preview');
+  const cur = $('exp-currency') ? ($('exp-currency').value || baseCurrency) : baseCurrency;
   const r = computePreview();
   if (!r.rows) {
-    el.className = 'preview';
-    el.textContent = r.error;
+    if (seq === previewSeq) { el.className = 'preview'; el.textContent = r.error; }
     return;
   }
-  const lines = r.rows.map((x) => `${memberName(x.memberId)}: ${fmt(x.cents / 100)}`).join(' · ');
+  const lines = r.rows.map((x) => `${memberName(x.memberId)}: ${fmtCur(cur, x.cents / 100)}`).join(' · ');
+  let extra = '';
+  if (cur !== baseCurrency) {
+    const rate = await getRate(cur, baseCurrency, $('exp-date').value);
+    if (seq !== previewSeq) return;
+    if (rate) {
+      const totalCents = r.sumCents || r.rows.reduce((a, x) => a + x.cents, 0);
+      extra = ` · ≈ ${fmtCur(baseCurrency, (totalCents / 100) * rate.rate)} (1 ${cur} = ${Number(rate.rate).toFixed(4)} ${baseCurrency})`;
+    } else {
+      extra = ` · ${baseCurrency} rate unavailable`;
+    }
+  }
+  if (seq !== previewSeq) return;
   if (r.error) {
     el.className = 'preview bad';
-    el.textContent = '⚠ ' + r.error + ': ' + lines;
+    el.textContent = '⚠ ' + r.error + ': ' + lines + extra;
   } else {
     el.className = 'preview ok';
-    el.textContent = '✓ ' + lines;
+    el.textContent = '✓ ' + lines + extra;
   }
+}
+
+async function getRate(from, to, date) {
+  if (from === to) return { rate: 1, rateDate: date };
+  const key = `${from}:${to}:${date}`;
+  if (fxCache[key]) return fxCache[key];
+  try {
+    const r = await api('GET', `/api/fx?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}`);
+    fxCache[key] = r;
+    return r;
+  } catch (_) { return null; }
 }
 
 function buildSplitFromForm() {
@@ -424,10 +474,16 @@ function renderExpenses() {
   ul.innerHTML = '';
   for (const e of sorted) {
     const li = document.createElement('li');
-    const shares = (e.split || []).map((s) => `<span>${esc(memberName(s.memberId))}: ${esc(fmt(s.share))}</span>`).join('');
+    const cur = e.currency || baseCurrency;
+    const foreign = cur !== baseCurrency && e.amountBase != null;
+    const baseNote = foreign ? ` <span class="fxnote">≈ ${esc(fmtCur(baseCurrency, e.amountBase))}</span>` : '';
+    const rateNote = foreign && e.fx && e.fx.rate
+      ? ` · 1 ${esc(cur)} = ${esc(Number(e.fx.rate).toFixed(4))} ${esc(baseCurrency)} (${esc(e.fx.rateDate || '')})`
+      : '';
+    const shares = (e.split || []).map((s) => `<span>${esc(memberName(s.memberId))}: ${esc(fmtCur(cur, s.share))}</span>`).join('');
     li.innerHTML = `
-      <div class="exp-head"><strong>${esc(e.description)}</strong><span class="exp-amount">${esc(fmt(e.amount))}</span></div>
-      <div class="exp-meta">paid by <strong>${esc(memberName(e.paidBy))}</strong> · ${esc(e.date)} ${e.category ? `<span class="cat">${esc(e.category)}</span>` : ''}</div>
+      <div class="exp-head"><strong>${esc(e.description)}</strong><span class="exp-amount">${esc(fmtCur(cur, e.amount))}${baseNote}</span></div>
+      <div class="exp-meta">paid by <strong>${esc(memberName(e.paidBy))}</strong> · ${esc(e.date)} ${e.category ? `<span class="cat">${esc(e.category)}</span>` : ''}${rateNote}</div>
       <div class="exp-shares">${shares}</div>
       <div class="exp-actions">
         <button class="btn small" data-act="edit">Edit</button>
@@ -453,6 +509,7 @@ function startEditExpense(e) {
   $('exp-cancel').hidden = false;
   $('exp-description').value = e.description;
   $('exp-amount').value = Number(e.amount).toFixed(2);
+  $('exp-currency').value = currencies.includes(e.currency) ? e.currency : baseCurrency;
   $('exp-date').value = e.date;
   $('exp-payer').value = e.paidBy;
   $('exp-category').value = e.category || '';
@@ -482,6 +539,7 @@ function resetExpenseForm() {
   $('exp-cancel').hidden = true;
   $('expense-form').reset();
   $('exp-date').value = todayISO();
+  $('exp-currency').value = baseCurrency;
   document.querySelector('input[name="splitMode"][value="equal"]').checked = true;
   partState = {};
   for (const m of state.members) partState[m.id] = { on: true, val: '' };
@@ -523,6 +581,8 @@ function bindEvents() {
   document.querySelectorAll('input[name="splitMode"]').forEach((r) =>
     r.addEventListener('change', () => { renderParticipants(); updatePreview(); }));
   $('exp-amount').addEventListener('input', updatePreview);
+  $('exp-date').addEventListener('change', updatePreview);
+  $('exp-currency').addEventListener('change', () => { renderParticipants(); updatePreview(); });
 
   $('exp-cancel').addEventListener('click', resetExpenseForm);
 
@@ -540,7 +600,8 @@ function bindEvents() {
       if (!date) throw new Error('Please pick a date.');
       if (!paidBy) throw new Error('Please choose who paid.');
       const split = buildSplitFromForm();
-      const payload = { description, amount: Math.round(amount * 100) / 100, date, paidBy, split };
+      const currency = $('exp-currency').value || baseCurrency;
+      const payload = { description, amount: Math.round(amount * 100) / 100, currency, date, paidBy, split };
       if (category) payload.category = category;
       if (editingExpenseId) {
         await api('PATCH', '/api/expenses/' + encodeURIComponent(editingExpenseId), payload);
@@ -611,6 +672,15 @@ function bindEvents() {
     renderAll();
   });
 
+  $('base-currency').addEventListener('change', async (ev) => {
+    try {
+      await api('PUT', '/api/settings', { baseCurrency: ev.target.value });
+      fxCache = {};
+      await refresh();
+      toast('Base currency updated');
+    } catch (e) { toast('Could not update base currency: ' + e.message); }
+  });
+
   // Burger menu navigation
   $('menu-btn').addEventListener('click', (ev) => { ev.stopPropagation(); toggleMenu(); });
   $('nav-backdrop').addEventListener('click', closeMenu);
@@ -626,23 +696,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindEvents();
   showView(localStorage.getItem('split.view') || 'summary');
   try {
+    const cfg = await api('GET', '/api/config');
+    if (cfg) {
+      if (Array.isArray(cfg.currencies) && cfg.currencies.length) currencies = cfg.currencies;
+      if (cfg.baseCurrency) baseCurrency = cfg.baseCurrency;
+      if (cfg.demo) {
+        $('demo-badge').hidden = false;
+        const reset = $('demo-reset');
+        reset.hidden = false;
+        reset.addEventListener('click', async () => {
+          try {
+            await api('POST', '/api/demo/reset');
+            await refresh();
+            toast('Demo data reset');
+          } catch (e) { toast('Reset failed: ' + e.message); }
+        });
+      }
+    }
+  } catch (_) { /* /api/config is optional */ }
+  try {
     await refresh();
   } catch (e) {
     toast('Could not reach the server: ' + e.message);
   }
-  try {
-    const cfg = await api('GET', '/api/config');
-    if (cfg && cfg.demo) {
-      $('demo-badge').hidden = false;
-      const reset = $('demo-reset');
-      reset.hidden = false;
-      reset.addEventListener('click', async () => {
-        try {
-          await api('POST', '/api/demo/reset');
-          await refresh();
-          toast('Demo data reset');
-        } catch (e) { toast('Reset failed: ' + e.message); }
-      });
-    }
-  } catch (_) { /* /api/config is optional */ }
 });

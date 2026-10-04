@@ -73,9 +73,14 @@
           <label>What?
             <input id="exp-description" type="text" placeholder="e.g. Groceries at Coop" maxlength="200" required />
           </label>
-          <label>Amount (CHF)
-            <input id="exp-amount" type="number" min="0.01" step="0.01" placeholder="42.50" required />
-          </label>
+          <div class="amount-field">
+            <label>Amount
+              <input id="exp-amount" type="number" min="0.01" step="0.01" placeholder="42.50" required />
+            </label>
+            <label class="currency-label">Currency
+              <select id="exp-currency" aria-label="Expense currency"></select>
+            </label>
+          </div>
         </div>
         <div class="grid3">
           <label>Date
@@ -137,7 +142,7 @@
           </label>
         </div>
         <div class="grid2">
-          <label>Amount (CHF)
+          <label>Amount (<span id="settle-cur-label">CHF</span>)
             <input id="settle-amount" type="number" min="0.01" step="0.01" placeholder="20.00" required />
           </label>
           <label>Date
@@ -159,6 +164,11 @@
     <!-- Members -->
     <section class="card" data-view="members" aria-label="Members" hidden>
       <h2>Members</h2>
+      <div class="me-box">
+        <label for="base-currency">💱 Base currency</label>
+        <p class="hint">Totals and balances are shown in this currency.</p>
+        <select id="base-currency" aria-label="Base currency"></select>
+      </div>
       <div class="me-box">
         <label for="me-select">🙋 Who am I?</label>
         <p class="hint">Highlight your own share (display only). Anyone can record for anyone.</p>

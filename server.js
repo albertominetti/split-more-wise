@@ -23,6 +23,12 @@ const DEMO = /^(1|true|yes|on)$/i.test(process.env.DEMO || '');
 const DEMO_RESET_MINUTES = Number.parseInt(process.env.DEMO_RESET_MINUTES || '0', 10) || 0;
 const store = createStore();
 
+// Multi-currency: only these are supported. We keep one CHF-based ECB rate table
+// per date; every other rate is derived from it, so changing the base currency
+// never needs a recompute or a network call.
+const SUPPORTED_CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'];
+const FRANKFURTER_URL = 'https://api.frankfurter.dev/v1';
+
 // ---------------------------------------------------------------------------
 // Store: load / seed / atomic save
 // ---------------------------------------------------------------------------
@@ -36,6 +42,8 @@ function seedData() {
     ],
     expenses: [],
     settlements: [],
+    settings: { baseCurrency: 'CHF' },
+    fx: { days: {} },
   };
 }
 
@@ -67,12 +75,12 @@ function firstRunData() {
 function demoData() {
   const data = seedData();
   const [a, b, c] = data.members;
-  const add = (description, amount, paidBy, shares, category) => {
+  const add = (description, amount, currency, paidBy, shares, category) => {
     data.expenses.push({
       id: crypto.randomUUID(),
       description,
       amount,
-      currency: 'CHF',
+      currency,
       date: todayISO(),
       paidBy: paidBy.id,
       split: shares.map(([m, cents]) => ({ memberId: m.id, share: cents / 100 })),
@@ -80,10 +88,11 @@ function demoData() {
       createdAt: new Date().toISOString(),
     });
   };
-  add('Groceries 🛒', 84.3, a, [[a, 2810], [b, 2810], [c, 2810]], 'Shopping');
-  add('Taxi to airport 🚕', 45, b, [[b, 2250], [c, 2250]], 'Transport');
-  add('Airbnb, 2 nights 🏠', 320, c, [[a, 10667], [b, 10666], [c, 10667]], 'Housing');
-  add('Coffee & pastries ☕', 12.5, b, [[a, 417], [b, 416], [c, 417]], 'Food');
+  add('Groceries 🛒', 84.3, 'CHF', a, [[a, 2810], [b, 2810], [c, 2810]], 'Shopping');
+  add('Taxi to airport 🚕', 45, 'CHF', b, [[b, 2250], [c, 2250]], 'Transport');
+  add('Airbnb, 2 nights 🏠', 320, 'CHF', c, [[a, 10667], [b, 10666], [c, 10667]], 'Housing');
+  add('Museum tickets 🎟️', 36, 'EUR', a, [[a, 1200], [b, 1200], [c, 1200]], 'Fun');
+  add('Coffee & pastries ☕', 12.5, 'CHF', b, [[a, 417], [b, 416], [c, 417]], 'Food');
   return data;
 }
 
@@ -92,6 +101,9 @@ function normalize(data) {
   if (!Array.isArray(data.members)) data.members = [];
   if (!Array.isArray(data.expenses)) data.expenses = [];
   if (!Array.isArray(data.settlements)) data.settlements = [];
+  if (!data.settings || typeof data.settings !== 'object') data.settings = { baseCurrency: 'CHF' };
+  if (!SUPPORTED_CURRENCIES.includes(data.settings.baseCurrency)) data.settings.baseCurrency = 'CHF';
+  if (!data.fx || typeof data.fx !== 'object' || !data.fx.days) data.fx = { days: {} };
   return data;
 }
 
@@ -136,8 +148,68 @@ function memberById(id) {
   return db.members.find((m) => m.id === id);
 }
 
-// Returns { balances: {memberId: number(major)}, settleUp: [{from,to,amount}], totalSpent }
-function computeSummary() {
+// ---------------------------------------------------------------------------
+// Foreign exchange (ECB reference rates via Frankfurter; no API key).
+// One CHF-based table per date is cached: { CHF: 1, EUR: x, USD: y, GBP: z }
+// meaning "1 CHF = x EUR". Cross rates are derived, so changing the base
+// currency is instant and needs no network and no data migration.
+// ---------------------------------------------------------------------------
+
+function fxTable(date) {
+  const days = db.fx && db.fx.days ? db.fx.days : {};
+  if (days[date]) return days[date];
+  // Fallback: nearest cached day on or before `date` (ECB skips weekends/holidays).
+  const keys = Object.keys(days).filter((d) => d <= date).sort();
+  return keys.length ? days[keys[keys.length - 1]] : null;
+}
+
+async function ensureFxTable(date) {
+  if (!db.fx) db.fx = { days: {} };
+  if (!db.fx.days) db.fx.days = {};
+  if (db.fx.days[date]) return db.fx.days[date];
+  const symbols = SUPPORTED_CURRENCIES.filter((c) => c !== 'CHF').join(',');
+  const url = `${FRANKFURTER_URL}/${encodeURIComponent(date)}?base=CHF&symbols=${symbols}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error('fx HTTP ' + res.status);
+  const json = await res.json();
+  const table = { date: json.date || date, CHF: 1 };
+  for (const c of SUPPORTED_CURRENCIES) {
+    if (c === 'CHF') continue;
+    const r = json.rates && json.rates[c];
+    if (Number.isFinite(r) && r > 0) table[c] = r;
+  }
+  db.fx.days[date] = table;
+  await saveData(db);
+  return table;
+}
+
+// 1 unit of `from` = ? units of `to`, on `date` (sync; uses cache only).
+function fxRate(from, to, date) {
+  if (from === to) return { rate: 1, rateDate: date };
+  const t = fxTable(date);
+  if (!t) return null;
+  const rf = Number.isFinite(t[from]) ? t[from] : 1; // CHF -> from
+  const rt = Number.isFinite(t[to]) ? t[to] : 1;     // CHF -> to
+  if (!rf || !rt) return null;
+  return { rate: rt / rf, rateDate: t.date || date };
+}
+
+// Same, but fetches and caches the day's table when missing (best effort).
+async function fxRateAsync(from, to, date) {
+  if (from === to) return { rate: 1, rateDate: date };
+  if (!fxTable(date)) {
+    try { await ensureFxTable(date); } catch (e) { console.error('[fx]', date, e.message); }
+  }
+  return fxRate(from, to, date);
+}
+
+function baseCurrency() {
+  return (db.settings && db.settings.baseCurrency) || 'CHF';
+}
+
+// Returns { balances: {memberId: number(major)}, settleUp: [{from,to,amount}], totalSpent, baseCurrency }
+async function computeSummary() {
+  const base = baseCurrency();
   // Work in cents internally.
   const bal = {};
   for (const m of db.members) bal[m.id] = 0;
@@ -145,13 +217,16 @@ function computeSummary() {
   let totalCents = 0;
 
   for (const e of db.expenses) {
-    const total = toCents(e.amount);
+    const currency = e.currency || base;
+    const fx = await fxRateAsync(currency, base, e.date);
+    const rate = fx ? fx.rate : 1;
+    const total = toCents(round2(Number(e.amount) * rate));
     if (!Number.isFinite(total) || total <= 0) continue;
     totalCents += total;
-    // Convert each share to cents; fix rounding drift onto the first entry.
+    // Convert each share into base cents; fix rounding drift onto the first entry.
     const shares = (e.split || []).map((s) => ({
       memberId: s.memberId,
-      cents: toCents(s.share),
+      cents: toCents(round2(Number(s.share) * rate)),
     }));
     const sumShares = shares.reduce((a, s) => a + s.cents, 0);
     const drift = total - sumShares;
@@ -203,7 +278,7 @@ function computeSummary() {
   const balances = {};
   for (const [id, cents] of Object.entries(bal)) balances[id] = toMajor(cents);
 
-  return { balances, settleUp, totalSpent: toMajor(totalCents) };
+  return { balances, settleUp, totalSpent: toMajor(totalCents), baseCurrency: base };
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +333,9 @@ function validateExpensePayload(p, isPartial) {
   if (p.category !== undefined && p.category !== null && p.category !== '') {
     if (typeof p.category !== 'string' || p.category.length > 60) return 'category must be a short string';
   }
-  if (p.currency !== undefined && p.currency !== 'CHF') return 'currency must be "CHF"';
+  if (p.currency !== undefined && !SUPPORTED_CURRENCIES.includes(p.currency)) {
+    return 'currency must be one of ' + SUPPORTED_CURRENCIES.join(', ');
+  }
   return null;
 }
 
@@ -374,12 +451,65 @@ async function handle(req, res) {
 
   // --- GET /api/state ------------------------------------------------------
   if (method === 'GET' && pathname === '/api/state') {
-    return sendJSON(res, 200, { members: db.members, expenses: db.expenses, settlements: db.settlements });
+    const base = baseCurrency();
+    const expenses = await Promise.all(db.expenses.map(async (e) => {
+      const currency = e.currency || base;
+      const fx = await fxRateAsync(currency, base, e.date);
+      const rate = fx ? fx.rate : 1;
+      return {
+        ...e,
+        currency,
+        amountBase: round2(Number(e.amount) * rate),
+        fx: fx ? { base, rate: fx.rate, rateDate: fx.rateDate } : null,
+      };
+    }));
+    return sendJSON(res, 200, {
+      members: db.members,
+      expenses,
+      settlements: db.settlements,
+      settings: db.settings || { baseCurrency: 'CHF' },
+    });
   }
 
   // --- GET /api/config -----------------------------------------------------
   if (method === 'GET' && pathname === '/api/config') {
-    return sendJSON(res, 200, { name: APP_NAME, demo: DEMO, demoResetMinutes: DEMO_RESET_MINUTES, storage: store.kind });
+    return sendJSON(res, 200, {
+      name: APP_NAME,
+      demo: DEMO,
+      demoResetMinutes: DEMO_RESET_MINUTES,
+      storage: store.kind,
+      baseCurrency: baseCurrency(),
+      currencies: SUPPORTED_CURRENCIES,
+    });
+  }
+
+  // --- GET /api/fx?from=EUR&to=CHF&date=YYYY-MM-DD -------------------------
+  if (method === 'GET' && pathname === '/api/fx') {
+    const from = (url.searchParams.get('from') || '').toUpperCase();
+    const to = (url.searchParams.get('to') || '').toUpperCase();
+    const date = url.searchParams.get('date') || todayISO();
+    if (!SUPPORTED_CURRENCIES.includes(from) || !SUPPORTED_CURRENCIES.includes(to)) {
+      return sendError(res, 400, 'unsupported currency');
+    }
+    if (!isValidDate(date)) return sendError(res, 400, 'date must be YYYY-MM-DD');
+    const fx = await fxRateAsync(from, to, date);
+    if (!fx) return sendError(res, 502, 'exchange rate unavailable, try again later');
+    return sendJSON(res, 200, { from, to, date, rate: fx.rate, rateDate: fx.rateDate });
+  }
+
+  // --- PUT /api/settings ---------------------------------------------------
+  if (pathname === '/api/settings' && (method === 'PUT' || method === 'PATCH')) {
+    const body = await readJSONBody(req);
+    if (body.baseCurrency !== undefined) {
+      const b = typeof body.baseCurrency === 'string' ? body.baseCurrency.toUpperCase() : '';
+      if (!SUPPORTED_CURRENCIES.includes(b)) {
+        return sendError(res, 400, 'baseCurrency must be one of ' + SUPPORTED_CURRENCIES.join(', '));
+      }
+      if (!db.settings) db.settings = {};
+      db.settings.baseCurrency = b;
+      await saveData(db);
+    }
+    return sendJSON(res, 200, { settings: db.settings || { baseCurrency: 'CHF' } });
   }
 
   // --- POST /api/demo/reset ------------------------------------------------
@@ -391,7 +521,7 @@ async function handle(req, res) {
 
   // --- GET /api/summary ----------------------------------------------------
   if (method === 'GET' && pathname === '/api/summary') {
-    return sendJSON(res, 200, computeSummary());
+    return sendJSON(res, 200, await computeSummary());
   }
 
   // --- Members -------------------------------------------------------------
@@ -455,11 +585,16 @@ async function handle(req, res) {
     const body = await readJSONBody(req);
     const err = validateExpensePayload(body, false);
     if (err) return sendError(res, 400, err);
+    const base = baseCurrency();
+    const currency = typeof body.currency === 'string' && body.currency.trim()
+      ? body.currency.trim().toUpperCase()
+      : base;
+    await fxRateAsync(currency, base, body.date); // warm the rate cache (best effort)
     const expense = {
       id: crypto.randomUUID(),
       description: body.description.trim(),
       amount: round2(Number(body.amount)),
-      currency: 'CHF',
+      currency,
       date: body.date,
       paidBy: body.paidBy,
       split: body.split.map((s) => ({ memberId: s.memberId, share: round2(Number(s.share)) })),
@@ -479,6 +614,7 @@ async function handle(req, res) {
       if (!expense) return sendError(res, 404, 'Expense not found');
       if (method === 'PATCH') {
         const body = await readJSONBody(req);
+        const base = baseCurrency();
         const merged = {
           description: body.description !== undefined ? body.description : expense.description,
           amount: body.amount !== undefined ? body.amount : expense.amount,
@@ -486,13 +622,16 @@ async function handle(req, res) {
           paidBy: body.paidBy !== undefined ? body.paidBy : expense.paidBy,
           split: body.split !== undefined ? body.split : expense.split,
           category: body.category !== undefined ? body.category : expense.category,
-          currency: 'CHF',
+          currency: body.currency !== undefined
+            ? String(body.currency).toUpperCase()
+            : (expense.currency || base),
         };
         const err = validateExpensePayload(merged, false);
         if (err) return sendError(res, 400, err);
+        await fxRateAsync(merged.currency, base, merged.date); // warm the rate cache (best effort)
         expense.description = merged.description.trim();
         expense.amount = round2(Number(merged.amount));
-        expense.currency = 'CHF';
+        expense.currency = merged.currency;
         expense.date = merged.date;
         expense.paidBy = merged.paidBy;
         expense.split = merged.split.map((s) => ({ memberId: s.memberId, share: round2(Number(s.share)) }));
